@@ -56,6 +56,6 @@ Start the server
 
 **Client:** React, TailwindCSS
 
-**Server:** Node, Express, Multer, Mongodb
+**Server:** Node, Express, Multer, Mongodb 
 
 
