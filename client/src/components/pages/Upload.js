@@ -1,17 +1,39 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Copy from "../Copy";
+import UploadHistory from "../UploadHistory";
+import { addToUploadHistory, getUploadHistory } from "../../utils/uploadHistory";
+import Toast from "../Toast";
+import { Box, Typography, Button, Paper, IconButton, Tooltip, Grid, Container } from '@mui/material';
+import { CloudUpload as UploadIcon, Delete as DeleteIcon } from '@mui/icons-material';
 
 function Upload() {
   const [file, setFile] = useState(null);
   const [link, setLink] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState("");
+  const [uploadStatus, setUploadStatus] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [history, setHistory] = useState([]);
+
+  // Load initial history
+  useEffect(() => {
+    setHistory(getUploadHistory());
+  }, []);
+
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type });
+  };
 
   const handleFileChange = (event) => {
     const selectedFile = event.target.files[0];
     if (selectedFile) {
+      if (selectedFile.size > 100 * 1024 * 1024) { // 100MB limit
+        showToast('File size exceeds 100MB limit', 'error');
+        return;
+      }
       setFile(selectedFile);
       setFileName(selectedFile.name);
+      showToast('File selected successfully', 'success');
     }
   };
 
@@ -30,15 +52,20 @@ function Upload() {
     setIsDragging(false);
     const droppedFile = event.dataTransfer.files[0];
     if (droppedFile) {
+      if (droppedFile.size > 100 * 1024 * 1024) { // 100MB limit
+        showToast('File size exceeds 100MB limit', 'error');
+        return;
+      }
       setFile(droppedFile);
       setFileName(droppedFile.name);
+      showToast('File selected successfully', 'success');
     }
   }, []);
 
   const handleFormSubmit = async (event) => {
     event.preventDefault();
     if (!file) {
-      alert("Please select a file first");
+      showToast('Please select a file first', 'error');
       return;
     }
 
@@ -46,6 +73,9 @@ function Upload() {
     formData.append("file", file);
 
     try {
+      setUploadStatus("Uploading...");
+      showToast('Uploading file...', 'info');
+
       const response = await fetch("http://localhost:2000/api/files", {
         method: "POST",
         body: formData,
@@ -54,216 +84,175 @@ function Upload() {
       if (response.ok) {
         const data = await response.json();
         setLink(data.url);
-        alert("File uploaded successfully");
+        setUploadStatus("Success");
+        
+        // Add to upload history
+        const newHistoryEntry = {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          url: data.url,
+          timestamp: Date.now(),
+          status: "Success"
+        };
+        addToUploadHistory(newHistoryEntry);
+        
+        // Update history state
+        setHistory(prevHistory => [newHistoryEntry, ...prevHistory]);
+
+        showToast('File uploaded successfully!', 'success');
         setFile(null);
         setFileName("");
         event.target.reset();
       } else {
-        console.error("File upload failed");
+        setUploadStatus("Failed");
+        showToast('File upload failed. Please try again.', 'error');
       }
     } catch (error) {
+      setUploadStatus("Failed");
+      showToast('Error uploading file. Please try again.', 'error');
       console.error("Error uploading file:", error);
     }
   };
 
-  const containerStyles = {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    width: '100%',
-    padding: '2rem 1rem',
-    gap: '2rem',
-    '@media (max-width: 768px)': {
-      padding: '1rem 0.5rem',
-      gap: '1rem'
-    }
-  }
-
-  const formStyles = {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '2rem',
-    padding: '3rem',
-    borderRadius: '12px',
-    background: 'linear-gradient(145deg, rgba(15, 52, 96, 0.9) 0%, rgba(26, 26, 46, 0.9) 100%)',
-    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-    border: '1px solid rgba(255, 215, 0, 0.2)',
-    width: '80%',
-    maxWidth: '600px',
-    '@media (max-width: 768px)': {
-      width: '95%',
-      padding: '2rem 1rem',
-      gap: '1.5rem'
-    },
-    '@media (max-width: 480px)': {
-      width: '100%',
-      padding: '1.5rem 1rem',
-      gap: '1rem'
-    }
-  }
-
-  const dropZoneStyles = {
-    width: '100%',
-    padding: '2rem',
-    border: `2px dashed ${isDragging ? '#ffd700' : 'rgba(255, 215, 0, 0.3)'}`,
-    borderRadius: '8px',
-    backgroundColor: 'rgba(10, 25, 47, 0.3)',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '1rem',
-    cursor: 'pointer',
-    transition: 'all 0.3s ease',
-    minHeight: '200px',
-    '@media (max-width: 768px)': {
-      padding: '1.5rem',
-      minHeight: '150px'
-    },
-    '@media (max-width: 480px)': {
-      padding: '1rem',
-      minHeight: '120px'
-    },
-    ':hover': {
-      borderColor: '#ffd700',
-      backgroundColor: 'rgba(10, 25, 47, 0.4)'
-    }
-  }
-
-  const labelStyles = {
-    fontSize: '1.75rem',
-    fontWeight: 'bold',
-    color: '#ffd700',
-    textAlign: 'center',
-    textShadow: '2px 2px 4px rgba(0, 0, 0, 0.3)',
-    '@media (max-width: 768px)': {
-      fontSize: '1.5rem'
-    },
-    '@media (max-width: 480px)': {
-      fontSize: '1.25rem'
-    }
-  }
-
-  const fileInfoStyles = {
-    color: '#ffd700',
-    fontSize: '1rem',
-    textAlign: 'center',
-    marginTop: '1rem',
-    wordBreak: 'break-word',
-    maxWidth: '100%',
-    '@media (max-width: 480px)': {
-      fontSize: '0.9rem'
-    }
-  }
-
-  const buttonStyles = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '0.5rem',
-    background: 'linear-gradient(90deg, #0a192f 0%, #1a1a2e 100%)',
-    color: '#ffd700',
-    padding: '0.75rem 1.5rem',
-    borderRadius: '8px',
-    border: '1px solid rgba(255, 215, 0, 0.3)',
-    fontWeight: 500,
-    transition: 'all 0.3s ease',
-    cursor: 'pointer',
-    width: '100%',
-    maxWidth: '200px',
-    justifyContent: 'center',
-    '@media (max-width: 480px)': {
-      padding: '0.5rem 1rem',
-      fontSize: '0.9rem'
-    },
-    ':hover': {
-      background: 'linear-gradient(90deg, #1a1a2e 0%, #0a192f 100%)',
-      transform: 'translateY(-2px)',
-      boxShadow: '0 0 15px rgba(255, 215, 0, 0.2)'
-    }
-  }
-
-  const iconStyles = {
-    fontSize: '2rem',
-    color: '#ffd700',
-    marginBottom: '1rem',
-    '@media (max-width: 768px)': {
-      fontSize: '1.75rem',
-      marginBottom: '0.75rem'
-    },
-    '@media (max-width: 480px)': {
-      fontSize: '1.5rem',
-      marginBottom: '0.5rem'
-    }
-  }
-
-  const instructionTextStyles = {
-    color: '#ffd700',
-    textAlign: 'center',
-    fontSize: '1rem',
-    '@media (max-width: 768px)': {
-      fontSize: '0.9rem'
-    },
-    '@media (max-width: 480px)': {
-      fontSize: '0.8rem'
-    }
-  }
-
   return (
-    <div style={containerStyles}>
-      <form style={formStyles} onSubmit={handleFormSubmit}>
-        <label style={labelStyles}>Upload Your File</label>
-        <div
-          style={dropZoneStyles}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={() => document.getElementById('fileInput').click()}
-        >
-          <svg
-            style={iconStyles}
-            xmlns="http://www.w3.org/2000/svg"
-            width="48"
-            height="48"
-            fill="currentColor"
-            viewBox="0 0 16 16"
+    <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Grid container spacing={3}>
+        {/* Upload Card */}
+        <Grid item xs={12} md={6}>
+          <Paper 
+            elevation={3} 
+            sx={{ 
+              p: 3,
+              minHeight: '500px',
+              background: 'linear-gradient(145deg, rgba(15, 52, 96, 0.9) 0%, rgba(26, 26, 46, 0.9) 100%)',
+              border: '1px solid rgba(255, 215, 0, 0.2)',
+              borderRadius: '12px',
+              display: 'flex',
+              flexDirection: 'column'
+            }}
           >
-            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-            <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
-          </svg>
-          <p style={instructionTextStyles}>
-            {isDragging ? 'Drop your file here' : 'Drag & drop your file here or click to browse'}
-          </p>
-          <input
-            id="fileInput"
-            type="file"
-            onChange={handleFileChange}
-            style={{ display: 'none' }}
-          />
-        </div>
-        {fileName && (
-          <div style={fileInfoStyles}>
-            Selected file: {fileName}
-          </div>
-        )}
-        <button type="submit" style={buttonStyles} disabled={!file}>
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="18"
-            height="18"
-            fill="currentColor"
-            viewBox="0 0 16 16"
+            <Typography variant="h5" sx={{ mb: 3, color: '#ffd700', textAlign: 'center', fontWeight: 'bold' }}>
+              Upload Your File
+            </Typography>
+            
+            <Box
+              sx={{
+                border: `2px dashed ${isDragging ? '#ffd700' : 'rgba(255, 215, 0, 0.3)'}`,
+                borderRadius: '8px',
+                p: 4,
+                textAlign: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                mb: 3,
+                backgroundColor: 'rgba(10, 25, 47, 0.3)',
+                flexGrow: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'center',
+                alignItems: 'center',
+                '&:hover': {
+                  borderColor: '#ffd700',
+                  backgroundColor: 'rgba(10, 25, 47, 0.4)'
+                }
+              }}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById('fileInput').click()}
+            >
+              <UploadIcon sx={{ fontSize: 64, color: '#ffd700', mb: 2 }} />
+              <Typography variant="body1" sx={{ color: '#ffd700', fontSize: '1.1rem' }}>
+                {isDragging ? 'Drop your file here' : 'Drag & drop your file here or click to browse'}
+              </Typography>
+              <input
+                id="fileInput"
+                type="file"
+                onChange={handleFileChange}
+                style={{ display: 'none' }}
+              />
+            </Box>
+
+            {fileName && (
+              <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between', p: 2, bgcolor: 'rgba(10, 25, 47, 0.3)', borderRadius: '8px' }}>
+                <Typography variant="body1" sx={{ color: '#ffd700', fontWeight: 500 }}>
+                  Selected: {fileName}
+                </Typography>
+                <Tooltip title="Clear Selection">
+                  <IconButton onClick={() => {
+                    setFile(null);
+                    setFileName("");
+                    document.getElementById('fileInput').value = "";
+                  }} sx={{ color: '#ffd700' }}>
+                    <DeleteIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+            )}
+
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={handleFormSubmit}
+              disabled={!file || uploadStatus === "Uploading..."}
+              sx={{
+                py: 1.5,
+                background: !file ? 'rgba(10, 25, 47, 0.5)' : 'linear-gradient(90deg, #0a192f 0%, #1a1a2e 100%)',
+                color: '#ffd700',
+                border: '1px solid rgba(255, 215, 0, 0.3)',
+                fontSize: '1.1rem',
+                fontWeight: 'bold',
+                '&:hover': {
+                  background: !file ? 'rgba(10, 25, 47, 0.5)' : 'linear-gradient(90deg, #1a1a2e 0%, #0a192f 100%)',
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 0 15px rgba(255, 215, 0, 0.2)'
+                },
+                '&.Mui-disabled': {
+                  background: 'rgba(10, 25, 47, 0.5)',
+                  color: 'rgba(255, 215, 0, 0.5)',
+                  border: '1px solid rgba(255, 215, 0, 0.2)'
+                }
+              }}
+            >
+              {uploadStatus === "Uploading..." ? "Uploading..." : "Upload File"}
+            </Button>
+
+            {link && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" sx={{ color: '#ffd700', mb: 2, textAlign: 'center' }}>
+                  Here's your file link! Share it with anyone
+                </Typography>
+                <Copy link={link} />
+              </Box>
+            )}
+          </Paper>
+        </Grid>
+
+        {/* History Card */}
+        <Grid item xs={12} md={6}>
+          <Paper 
+            elevation={3} 
+            sx={{ 
+              p: 3,
+              minHeight: '500px',
+              background: 'linear-gradient(145deg, rgba(15, 52, 96, 0.9) 0%, rgba(26, 26, 46, 0.9) 100%)',
+              border: '1px solid rgba(255, 215, 0, 0.2)',
+              borderRadius: '12px'
+            }}
           >
-            <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
-            <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
-          </svg>
-          <span style={{ paddingLeft: '0.5rem' }}>Upload</span>
-        </button>
-      </form>
-      <div>
-        {link === "" ? <></> : <Copy link={link} />}
-      </div>
-    </div>
+            <UploadHistory history={history} setHistory={setHistory} />
+          </Paper>
+        </Grid>
+      </Grid>
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+    </Container>
   );
 }
 

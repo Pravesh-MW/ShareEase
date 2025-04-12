@@ -1,19 +1,75 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { addToDownloadHistory, getDownloadHistory } from "../../utils/downloadHistory";
+import DownloadHistory from "../DownloadHistory";
 
 function Download() {
     const [url, setUrl] = useState(null);
+    const [history, setHistory] = useState([]);
+    const [preview, setPreview] = useState(null);
+
+    useEffect(() => {
+        // Load history on component mount
+        setHistory(getDownloadHistory());
+    }, []);
 
     const handleInputChange = (e) => {
         setUrl(e.target.value);
+        // Clear preview when URL changes
+        setPreview(null);
+    }
+
+    const handleDownload = async () => {
+        if (!url) return;
+
+        try {
+            // Get file information
+            const response = await fetch(url);
+            const blob = await response.blob();
+            const fileType = blob.type;
+            const fileName = url.substring(url.lastIndexOf("/") + 1);
+            
+            // Add to download history
+            addToDownloadHistory({
+                name: fileName,
+                type: fileType,
+                size: blob.size,
+                url: url,
+                timestamp: Date.now()
+            });
+
+            // Update history state
+            setHistory(getDownloadHistory());
+
+            // Set preview for images
+            if (fileType.startsWith('image/')) {
+                const objectUrl = URL.createObjectURL(blob);
+                setPreview(objectUrl);
+            }
+
+            // Create download link
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(downloadUrl);
+        } catch (error) {
+            console.error('Error downloading file:', error);
+            alert('Error downloading file. Please check the URL and try again.');
+        }
     }
 
     const containerStyles = {
         display: 'flex',
+        flexDirection: 'column',
         width: '100%',
-        height: '66%',
+        height: '100%',
         justifyContent: 'center',
         alignItems: 'center',
-        paddingTop: '5rem'
+        paddingTop: '2rem',
+        gap: '2rem'
     }
 
     const formStyles = {
@@ -71,6 +127,14 @@ function Download() {
         }
     }
 
+    const previewStyles = {
+        maxWidth: '100%',
+        maxHeight: '300px',
+        borderRadius: '8px',
+        marginTop: '1rem',
+        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)'
+    }
+
     return (
         <div style={containerStyles}>
             <div style={formStyles}>
@@ -83,10 +147,18 @@ function Download() {
                     style={inputStyles}
                     placeholder="Paste your file URL here"
                 />
-                <a
-                    href={url}
-                    download={url?.substring(url.lastIndexOf("/") + 1)}
+                {preview && (
+                    <img 
+                        src={preview} 
+                        alt="File preview" 
+                        style={previewStyles}
+                        onError={() => setPreview(null)}
+                    />
+                )}
+                <button
+                    onClick={handleDownload}
                     style={buttonStyles}
+                    disabled={!url}
                 >
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -100,8 +172,9 @@ function Download() {
                         <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z" />
                     </svg>
                     <span style={{ paddingLeft: '0.5rem' }}>Download</span>
-                </a>
+                </button>
             </div>
+            <DownloadHistory />
         </div>
     );
 }
