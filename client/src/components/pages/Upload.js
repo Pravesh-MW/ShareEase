@@ -76,7 +76,7 @@ function Upload() {
       setUploadStatus("Uploading...");
       showToast('Uploading file...', 'info');
 
-      const response = await fetch("http://localhost:2000/api/files", {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/api/files`, {
         method: "POST",
         body: formData,
       });
